@@ -57,6 +57,28 @@ def test_lineart_suppresses_texture_noise():
     assert ink_ratio < 0.15
 
 
+def test_lineart_detects_isoluminant_color_edges():
+    # Deux aplats de luminance quasi égale mais de teintes opposées (rose / bleu-violet) :
+    # la frontière doit être tracée — l'ancien Canny en niveaux de gris la ratait.
+    arr = np.zeros((120, 160, 3), dtype=np.uint8)
+    arr[:, :80] = (200, 120, 160)
+    arr[:, 80:] = (120, 140, 200)
+    lines = line_art(arr, detail=60)
+    band = lines[:, 76:84].min(axis=2)
+    assert float((band < 100).mean()) > 0.05
+
+
+def test_lineart_zone_boundaries_reinforce():
+    img = load_image(_synthetic_png())
+    pal = extract_palette(img, num_colors=4)
+    lines = line_art(img, detail=50, zones=pal.labels)
+    assert lines.shape == img.shape
+    # La frontière ciel/herbe (mi-hauteur) doit porter du trait.
+    h = img.shape[0]
+    band = lines[h // 2 - 4 : h // 2 + 4, :].min(axis=2)
+    assert float((band < 100).any())
+
+
 def test_palette_sorted_and_covers():
     img = load_image(_synthetic_png())
     pal = extract_palette(img, num_colors=6)

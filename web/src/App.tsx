@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Dropzone from './components/Dropzone'
 import ResultGallery from './components/ResultGallery'
 import PalettePanel from './components/PalettePanel'
-import { processImage, type ProcessOptions, type ProcessResponse } from './api'
+import {
+  processImage,
+  type LineStyle,
+  type ProcessOptions,
+  type ProcessResponse,
+} from './api'
 
 export default function App() {
   const [file, setFile] = useState<File | null>(null)
@@ -13,6 +18,7 @@ export default function App() {
   const [numColors, setNumColors] = useState(12)
   const [numPlanes, setNumPlanes] = useState(4)
   const [detail, setDetail] = useState(50)
+  const [lineStyle, setLineStyle] = useState<LineStyle>('contour')
 
   // Une seule requête à la fois : si un réglage change pendant l'analyse, on mémorise
   // la demande et on la rejoue dès que la requête en cours se termine.
@@ -49,10 +55,10 @@ export default function App() {
   useEffect(() => {
     if (!file) return
     const timer = setTimeout(() => {
-      void launch(file, { numColors, numPlanes, detail })
+      void launch(file, { numColors, numPlanes, detail, lineStyle })
     }, 400)
     return () => clearTimeout(timer)
-  }, [file, numColors, numPlanes, detail, launch])
+  }, [file, numColors, numPlanes, detail, lineStyle, launch])
 
   function handleFile(f: File) {
     setResult(null)
@@ -102,12 +108,24 @@ export default function App() {
             onChange={(e) => setDetail(Number(e.target.value))}
           />
         </label>
+        <label>
+          Style de trait
+          <select
+            value={lineStyle}
+            onChange={(e) => setLineStyle(e.target.value as LineStyle)}
+          >
+            <option value="contour">Contour net</option>
+            <option value="xdog">Crayon (XDoG)</option>
+          </select>
+        </label>
       </div>
 
       <Dropzone onFile={handleFile} compact={Boolean(file)} fileName={file?.name} />
 
       {loading && (
-        <p className="status">{result ? 'Mise à jour des réglages…' : 'Analyse en cours…'}</p>
+        <p className="status status--busy">
+          {result ? 'Mise à jour des réglages…' : 'Analyse en cours…'}
+        </p>
       )}
       {error && <p className="status status--error">{error}</p>}
 

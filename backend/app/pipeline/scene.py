@@ -142,16 +142,31 @@ def _run_florence(image: np.ndarray, task: str, text: str = "") -> dict | None:
 def _describe_and_ground(
     image: np.ndarray,
 ) -> tuple[str, list[tuple[str, list[float]]]]:
+    """Description + boîtes d'objets, en combinant deux passes Florence-2.
+
+    L'ancrage de la description (`<CAPTION_TO_PHRASE_GROUNDING>`) rate beaucoup d'objets
+    sur les scènes chargées (il ne peut ancrer que ce que la description mentionne) ; la
+    passe de détection `<OD>` complète avec les objets restants. Le dédoublonnage IoU
+    garde en priorité les labels de l'ancrage, plus descriptifs.
+    """
     cap = _run_florence(image, "<MORE_DETAILED_CAPTION>")
     if cap is None:
         return "", []
     caption = cap.get("<MORE_DETAILED_CAPTION>", "").strip()
-    grounded = _run_florence(image, "<CAPTION_TO_PHRASE_GROUNDING>", caption)
+
     items: list[tuple[str, list[float]]] = []
+    grounded = _run_florence(image, "<CAPTION_TO_PHRASE_GROUNDING>", caption)
     if grounded:
         data = grounded.get("<CAPTION_TO_PHRASE_GROUNDING>", {})
         for label, box in zip(data.get("labels", []), data.get("bboxes", [])):
             items.append((str(label), [float(c) for c in box]))
+
+    detected = _run_florence(image, "<OD>")
+    if detected:
+        data = detected.get("<OD>", {})
+        for label, box in zip(data.get("labels", []), data.get("bboxes", [])):
+            items.append((str(label).lower(), [float(c) for c in box]))
+
     return caption, _dedup(items)
 
 

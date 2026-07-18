@@ -65,10 +65,17 @@ Produit un trait noir **épuré et traçable**, pensé pour le **décalque au cr
 
 1. **lissage préservant les bords** pour fondre les textures (feuillage, herbe, tissu) en
    masses sans baver sur les vraies arêtes ;
-2. **contours Canny** auto-réglés (par défaut) ou **XDoG** (style crayon) en option ;
-3. **nettoyage** : fermeture morphologique + suppression des petites composantes (le
+2. **contours en couleur** : Canny sur chaque canal **Lab**, seuils calés sur les
+   percentiles de gradient de chaque canal — les frontières purement chromatiques (rose
+   sur violet de même luminosité, typiques des images pastel) sont détectées, là où un
+   Canny en niveaux de gris ne les voit pas. En option : **XDoG** (style crayon,
+   sélectionnable dans l'interface via `line_style`) ;
+3. **renfort par zones de couleur** : les frontières de la quantification k-means (les
+   mêmes que le paint-by-number, après filtre médian anti-tramage) sont fusionnées au
+   trait → chaque masse à peindre a un contour à décalquer ;
+4. **nettoyage** : fermeture morphologique + suppression des petites composantes (le
    « poivre et sel ») ;
-4. **hiérarchie sujet/fond** via le masque `rembg` : le fond est lissé plus fort et filtré
+5. **hiérarchie sujet/fond** via le masque `rembg` : le fond est lissé plus fort et filtré
    plus sévèrement → trait net sur le sujet, fond simplifié.
 
 Le paramètre `detail` (0-100, défaut 50) règle la finesse : bas = fond très épuré, haut =

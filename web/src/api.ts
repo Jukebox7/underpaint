@@ -45,10 +45,13 @@ export interface ProcessResponse {
   planes: PlaneInfo[]
 }
 
+export type LineStyle = 'contour' | 'xdog'
+
 export interface ProcessOptions {
   numColors: number
   numPlanes: number
   detail: number
+  lineStyle: LineStyle
 }
 
 export async function processImage(
@@ -60,6 +63,7 @@ export async function processImage(
   form.append('num_colors', String(options.numColors))
   form.append('num_planes', String(options.numPlanes))
   form.append('detail', String(options.detail))
+  form.append('line_style', options.lineStyle)
 
   const res = await fetch('/api/process', { method: 'POST', body: form })
   if (!res.ok) {

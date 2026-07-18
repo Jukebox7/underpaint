@@ -30,6 +30,7 @@ Requête `multipart/form-data` :
 | `num_colors` | entier | 12 | Taille de la palette / du paint-by-number |
 | `num_planes` | entier | 4 | Nombre de plans dans la carte des plans |
 | `detail` | entier | 50 | Finesse du dessin au trait (0-100 ; 100 = sans lissage) |
+| `line_style` | string | `contour` | Style du trait : `contour` (Canny couleur) ou `xdog` (crayon) |
 
 ### Réponse `200`
 

@@ -13,6 +13,27 @@ function recipeText(color: PaletteColor): string {
     .join(' + ')
 }
 
+/** Couleur de texte lisible (noir/blanc) sur un fond hex donné. */
+function textOn(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return 0.299 * r + 0.587 * g + 0.114 * b > 145 ? '#23242a' : '#fff'
+}
+
+function Swatch({ hex, num }: { hex: string; num?: number }) {
+  return (
+    <span className="swatch" style={{ background: hex, color: textOn(hex) }}>
+      {num}
+    </span>
+  )
+}
+
+/** « plan 3 » tel quel ; « arrière-plan (plan 1) » pour les libellés nommés. */
+function planeText(planeLabel: string, plane: number): string {
+  return planeLabel === `plan ${plane}` ? planeLabel : `${planeLabel} (plan ${plane})`
+}
+
 export default function PalettePanel({
   palette,
   planes,
@@ -30,11 +51,11 @@ export default function PalettePanel({
           <ol className="planes">
             {sceneObjects.map((o) => (
               <li key={o.index} className="plane">
-                <span className="swatch" style={{ background: o.baseColor }} />
+                <Swatch hex={o.baseColor} num={o.index} />
                 <span className="plane__label">
-                  {o.index}. {o.label}{' '}
+                  {o.label}{' '}
                   <span className="color__pct">
-                    — {o.planeLabel} (plan {o.plane})
+                    — {planeText(o.planeLabel, o.plane)}
                   </span>
                 </span>
               </li>
@@ -48,9 +69,9 @@ export default function PalettePanel({
         <ol className="planes">
           {planes.map((p) => (
             <li key={p.order} className="plane">
-              <span className="swatch" style={{ background: p.baseColor }} />
+              <Swatch hex={p.baseColor} num={p.order} />
               <span className="plane__label">
-                {p.label} — fond {p.baseColor}{' '}
+                {p.label} — fond <span className="color__hex">{p.baseColor}</span>{' '}
                 <span className="color__pct">(couleur n°{p.baseColorIndex})</span>
               </span>
             </li>
@@ -63,11 +84,9 @@ export default function PalettePanel({
         <ul className="colors">
           {palette.map((c) => (
             <li key={c.index} className="color">
-              <span className="swatch" style={{ background: c.hex }} />
+              <Swatch hex={c.hex} num={c.index} />
               <span className="color__meta">
-                <strong>
-                  {c.index}. {c.hex}
-                </strong>{' '}
+                <strong className="color__hex">{c.hex}</strong>{' '}
                 <span className="color__pct">({c.pct}%)</span>
                 <br />
                 <span className="color__recipe">

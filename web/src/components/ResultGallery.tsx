@@ -48,7 +48,7 @@ export default function ResultGallery({ original, result }: Props) {
       </div>
       {tab !== 'original' && (
         <a className="download" href={src} download={`${tab}.png`}>
-          Télécharger
+          ⤓ Télécharger « {label} »
         </a>
       )}
     </div>

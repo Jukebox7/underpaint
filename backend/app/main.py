@@ -35,6 +35,7 @@ def process(
     num_colors: int = Form(12),
     num_planes: int = Form(4),
     detail: int = Form(50),
+    line_style: str = Form("contour"),
 ) -> ProcessResponse:
     if not 2 <= num_colors <= 24:
         raise HTTPException(422, "num_colors doit être entre 2 et 24")
@@ -42,6 +43,8 @@ def process(
         raise HTTPException(422, "num_planes doit être entre 2 et 8")
     if not 0 <= detail <= 100:
         raise HTTPException(422, "detail doit être entre 0 et 100")
+    if line_style not in ("contour", "xdog"):
+        raise HTTPException(422, "line_style doit être 'contour' ou 'xdog'")
 
     data = image.file.read(_MAX_UPLOAD_BYTES + 1)
     if not data:
@@ -51,7 +54,11 @@ def process(
 
     try:
         result = run(
-            data, num_colors=num_colors, num_planes=num_planes, detail=detail
+            data,
+            num_colors=num_colors,
+            num_planes=num_planes,
+            detail=detail,
+            line_style=line_style,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

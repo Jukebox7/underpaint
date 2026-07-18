@@ -49,7 +49,11 @@ def _image_analysis(data: bytes, image: np.ndarray) -> dict:
 
 
 def run(
-    data: bytes, num_colors: int = 12, num_planes: int = 4, detail: int = 50
+    data: bytes,
+    num_colors: int = 12,
+    num_planes: int = 4,
+    detail: int = 50,
+    line_style: str = "contour",
 ) -> dict:
     """Exécute le pipeline complet et renvoie le dict de réponse de l'API."""
     image = load_image(data)
@@ -57,13 +61,20 @@ def run(
     analysis = _image_analysis(data, image)
     mask, depth = analysis["mask"], analysis["depth"]
 
-    lineart_img = line_art(image, mask=mask, detail=detail)
+    palette = extract_palette(image, num_colors)
+    lineart_img = line_art(
+        image,
+        mask=mask,
+        detail=detail,
+        method=line_style,
+        zones=palette.labels,
+        zone_colors=palette.centers,
+    )
     sepia_img = to_sepia(image)
     objects_img = analysis["objects_img"]
     scene_img, scene_caption, scene_objects = analyze_scene(
         image, depth, num_planes, extracted=analysis["scene"]
     )
-    palette = extract_palette(image, num_colors)
     planes_img, planes_meta = compute_planes(image, depth, palette, num_planes)
     pbn_img = paint_by_number(palette)
 

@@ -4,10 +4,14 @@ Stratégie pour un trait *traçable* (et non une bouillie de mouchetures) :
 
 1. **Lissage préservant les bords** (edge-preserving filter) pour fondre les textures
    (feuillage, herbe, tissu) en masses, tout en gardant les vraies arêtes.
-2. **Détection de contours** (Canny auto-réglé) ou XDoG (style crayon) en option.
-3. **Nettoyage** : fermeture morphologique pour relier les traits, puis suppression des
+2. **Détection de contours en couleur** : Canny sur chaque canal Lab (par défaut) — les
+   frontières *chromatiques* (rose sur violet, iso-luminantes) sont vues aussi bien que
+   les frontières claires/sombres — ou XDoG (style crayon) en option.
+3. **Renfort par zones de couleur** : les frontières de la quantification k-means
+   (celles du paint-by-number) garantissent un contour autour de chaque masse à peindre.
+4. **Nettoyage** : fermeture morphologique pour relier les traits, puis suppression des
    petites composantes (le « poivre et sel »).
-4. **Hiérarchie sujet/fond** : si le masque du sujet est fourni, le fond est lissé plus
+5. **Hiérarchie sujet/fond** : si le masque du sujet est fourni, le fond est lissé plus
    fort et ses petites composantes filtrées plus sévèrement → trait net sur le sujet,
    fond épuré.
 """
@@ -23,22 +27,29 @@ def line_art(
     mask: np.ndarray | None = None,
     detail: int = 50,
     method: str = "contour",
+    zones: np.ndarray | None = None,
+    zone_colors: np.ndarray | None = None,
 ) -> np.ndarray:
     """Renvoie un trait noir sur fond blanc (RGB uint8).
 
     ``detail`` (0-100) règle la finesse : bas = fond très épuré, haut = plus de détails.
+    ``zones`` (labels HxW de la palette) ajoute les frontières entre zones de couleur ;
+    ``zone_colors`` (centres K×3 RGB) permet de ne garder que les frontières entre
+    couleurs franchement différentes (sinon toutes les frontières sont gardées).
     """
     detail = int(max(0, min(detail, 100)))
     h, w = image.shape[:2]
     area = h * w
 
     smooth = _smooth(image, mask, detail)
-    gray = cv2.cvtColor(smooth, cv2.COLOR_RGB2GRAY)
 
     if method == "xdog":
-        ink = _xdog_ink(gray, detail)
+        ink = _xdog_ink(cv2.cvtColor(smooth, cv2.COLOR_RGB2GRAY), detail)
     else:
-        ink = _canny_ink(gray, detail)
+        ink = _color_canny_ink(smooth, detail)
+
+    if zones is not None:
+        ink |= _zone_boundaries(zones, zone_colors, detail)
 
     # Relie les traits proches puis enlève les mouchetures.
     ink = cv2.morphologyEx(
@@ -86,15 +97,73 @@ def _smooth(image: np.ndarray, mask: np.ndarray | None, detail: int) -> np.ndarr
     return np.where(mask[:, :, None], fg, bg)
 
 
-def _canny_ink(gray: np.ndarray, detail: int) -> np.ndarray:
-    """Contours via Canny auto-réglé (seuils dérivés de la médiane)."""
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    v = float(np.median(blurred))
-    sigma = float(np.interp(detail, [0, 100], [0.50, 0.20]))
-    lower = int(max(0, (1.0 - sigma) * v))
-    upper = int(min(255, (1.0 + sigma) * v))
-    edges = cv2.Canny(blurred, lower, max(lower + 1, upper))
-    return edges > 0
+def _color_canny_ink(image: np.ndarray, detail: int) -> np.ndarray:
+    """Contours Canny par canal Lab, seuils dérivés de la distribution des gradients.
+
+    Travailler en Lab rend visibles les frontières purement chromatiques (rose/violet de
+    même luminosité) que la conversion en gris efface. Les seuils sont calés sur les
+    percentiles de la magnitude de gradient *de chaque canal* : une image douce et
+    lumineuse (pastel) garde des seuils adaptés à ses contours réels.
+    """
+    lab = cv2.cvtColor(image, cv2.COLOR_RGB2Lab)
+    percentile = float(np.interp(detail, [0, 100], [99.3, 97.5]))
+    edges = np.zeros(image.shape[:2], dtype=bool)
+
+    for chan in cv2.split(lab):
+        blurred = cv2.GaussianBlur(chan, (3, 3), 0)
+        gx = cv2.Sobel(blurred, cv2.CV_32F, 1, 0)
+        gy = cv2.Sobel(blurred, cv2.CV_32F, 0, 1)
+        mag = cv2.magnitude(gx, gy)
+        # Percentile sur les seuls pixels à gradient actif : sur une image plate, le
+        # percentile global vaut 0 et raterait le seul vrai bord.
+        active = mag[mag > 2.0]
+        if active.size < 50:  # canal plat (ex. chroma d'une image en gris)
+            continue
+        # 0,7 × un percentile haut (régime des vrais bords) : au percentile exact,
+        # l'hystérésis n'aurait aucun pixel « fort » à propager sur une image plate.
+        # Plancher 64 : la queue du bruit résiduel lissé (surtout en chroma, ≲ 60)
+        # ne doit fournir aucun pixel fort.
+        upper = max(64.0, 0.7 * float(np.percentile(active, percentile)))
+        edges |= cv2.Canny(blurred, 0.4 * upper, upper) > 0
+
+    return edges
+
+
+def _zone_boundaries(
+    zones: np.ndarray, zone_colors: np.ndarray | None = None, detail: int = 50
+) -> np.ndarray:
+    """Frontières fines (1 px) entre zones de couleur *franchement* différentes.
+
+    Un filtre médian gomme d'abord le tramage du k-means (pixels isolés dans les
+    dégradés). Puis, si les couleurs des zones sont fournies, seules les frontières
+    entre couleurs éloignées en Lab sont gardées : les frontières de *banding* (bandes
+    voisines d'un même dégradé de ciel/nuage) disparaissent, celles des vraies masses
+    restent.
+
+    Le renfort suit le curseur ``detail`` — sinon il imposerait une base de traits
+    constante et le curseur ne changerait presque rien : à détail bas, lissage médian
+    fort + seuil ΔE exigeant → seules les grandes masses contrastées gardent un contour.
+    """
+    kernel = int(round(np.interp(detail, [0, 100], [11, 3])))
+    kernel += (kernel + 1) % 2  # taille impaire requise par medianBlur
+    delta_min = float(np.interp(detail, [0, 100], [60.0, 28.0]))
+    z = cv2.medianBlur(zones.astype(np.uint8), kernel)
+
+    if zone_colors is not None:
+        centers_lab = cv2.cvtColor(
+            zone_colors[None].astype(np.uint8), cv2.COLOR_RGB2Lab
+        )[0].astype(np.float32)
+        dist = np.linalg.norm(centers_lab[:, None] - centers_lab[None, :], axis=2)
+        keep = dist > delta_min  # (K, K) : paires de couleurs assez éloignées
+        edges = np.zeros(z.shape, dtype=bool)
+        edges[:, 1:] |= keep[z[:, 1:], z[:, :-1]]
+        edges[1:, :] |= keep[z[1:, :], z[:-1, :]]
+        return edges
+
+    edges = np.zeros(z.shape, dtype=bool)
+    edges[:, 1:] |= z[:, 1:] != z[:, :-1]
+    edges[1:, :] |= z[1:, :] != z[:-1, :]
+    return edges
 
 
 def _xdog_ink(gray: np.ndarray, detail: int) -> np.ndarray:
