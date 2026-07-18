@@ -1,0 +1,17 @@
+{
+  "name": "painting",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Assistant de peinture par analyse d'image (backend Python + front React)",
+  "scripts": {
+    "setup": "uv sync --directory backend && npm --prefix web install",
+    "dev": "concurrently -k -n api,web -c blue,green \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "uv run --directory backend uvicorn app.main:app --reload --port 8000",
+    "dev:web": "npm --prefix web run dev",
+    "lint:docs": "node scripts/lint-mermaid.mjs",
+    "test:backend": "uv run --directory backend pytest -q"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
