@@ -16,7 +16,10 @@ export default function App() {
   async function handleFile(file: File) {
     setError(null)
     setResult(null)
-    setOriginal(URL.createObjectURL(file))
+    setOriginal((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
     setLoading(true)
     try {
       const res = await processImage(file, { numColors, numPlanes, detail })

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances_argmin
 
 
 @dataclass
@@ -35,9 +36,9 @@ def extract_palette(image: np.ndarray, num_colors: int = 12) -> Palette:
     km.fit(sample)
 
     centers = km.cluster_centers_
-    # Assigne chaque pixel au centre le plus proche.
-    dists = np.linalg.norm(pixels[:, None, :] - centers[None, :, :], axis=2)
-    labels_flat = dists.argmin(axis=1)
+    # Assigne chaque pixel au centre le plus proche (calcul par blocs : le broadcast
+    # (N, K, 3) complet coûterait des centaines de Mo sur une image 1024²).
+    labels_flat = pairwise_distances_argmin(pixels, centers)
 
     counts = np.bincount(labels_flat, minlength=k)
     order = np.argsort(counts)[::-1]

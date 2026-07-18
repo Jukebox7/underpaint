@@ -28,6 +28,7 @@ const TABS: { key: TabKey; label: string }[] = [
 export default function ResultGallery({ original, result }: Props) {
   const [tab, setTab] = useState<TabKey>('lineart')
   const src = tab === 'original' ? original : result[tab]
+  const label = TABS.find((t) => t.key === tab)?.label ?? tab
 
   return (
     <div className="gallery">
@@ -43,7 +44,7 @@ export default function ResultGallery({ original, result }: Props) {
         ))}
       </div>
       <div className="gallery__image">
-        <img src={src} alt={tab} />
+        <img src={src} alt={label} />
       </div>
       {tab !== 'original' && (
         <a className="download" href={src} download={`${tab}.png`}>

@@ -13,6 +13,7 @@ les masques de ``objects`` (FastSAM/régions) avec des labels génériques.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import TypedDict
 
@@ -21,6 +22,8 @@ import numpy as np
 
 from .objects import _segment as _fallback_segment
 from .palette import to_hex
+
+_LOG = logging.getLogger(__name__)
 
 _FLORENCE = None  # (model, processor) ou False
 _SAM = None  # modèle SAM ou False
@@ -88,7 +91,8 @@ def _get_florence():
             )
             model.to(device).eval()
             _FLORENCE = (model, processor, device)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("Florence-2 indisponible (%s) : labels génériques", exc)
             _FLORENCE = False
     return _FLORENCE or None
 
@@ -119,7 +123,8 @@ def _run_florence(image: np.ndarray, task: str, text: str = "") -> dict | None:
         return processor.post_process_generation(
             decoded, task=task, image_size=(w, h)
         )
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("Inférence Florence-2 échouée (%s)", exc)
         return None
 
 
@@ -171,7 +176,8 @@ def _get_sam():
             from ultralytics import SAM
 
             _SAM = SAM(OBJSAM_MODEL)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("SAM indisponible (%s) : masques de repli", exc)
             _SAM = False
     return _SAM or None
 
@@ -190,7 +196,8 @@ def _sam_boxes(image: np.ndarray, boxes: list[list[float]]) -> list[np.ndarray] 
             return []
         data = r.masks.data.cpu().numpy()
         return [data[i] > 0.5 for i in range(data.shape[0])]
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("Inférence SAM échouée (%s) : masques de repli", exc)
         return None
 
 

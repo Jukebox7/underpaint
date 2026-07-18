@@ -1,6 +1,7 @@
 # Node
 node_modules/
 web/dist/
+*.tsbuildinfo
 *.log
 
 # Python / uv

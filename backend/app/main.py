@@ -10,6 +10,8 @@ from .schemas import HealthResponse, ProcessResponse
 
 app = FastAPI(title="painting", version="0.1.0")
 
+_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+
 # Le front (Vite) appelle en local ; on autorise localhost.
 app.add_middleware(
     CORSMiddleware,
@@ -41,9 +43,11 @@ def process(
     if not 0 <= detail <= 100:
         raise HTTPException(422, "detail doit être entre 0 et 100")
 
-    data = image.file.read()
+    data = image.file.read(_MAX_UPLOAD_BYTES + 1)
     if not data:
         raise HTTPException(400, "Fichier image manquant ou vide")
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Image trop lourde (max 25 Mo)")
 
     try:
         result = run(

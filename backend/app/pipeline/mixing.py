@@ -8,7 +8,7 @@ mesurée par la distance perceptuelle ΔE (CIE76) dans l'espace Lab.
 
 from __future__ import annotations
 
-from itertools import combinations
+from itertools import combinations, product
 from typing import TypedDict
 
 import numpy as np
@@ -75,19 +75,9 @@ def _weight_tuples(size: int, options: list[int]):
     if size == 1:
         yield (1,)
         return
-    for combo in _product(options, size):
+    for combo in product(options, repeat=size):
         if min(combo) == 1:  # au moins une part = 1 pour limiter les doublons d'échelle
             yield combo
-
-
-def _product(options: list[int], size: int):
-    if size == 1:
-        for o in options:
-            yield (o,)
-        return
-    for o in options:
-        for rest in _product(options, size - 1):
-            yield (o, *rest)
 
 
 def _srgb_to_lab(rgb: np.ndarray) -> np.ndarray:

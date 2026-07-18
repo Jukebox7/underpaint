@@ -8,10 +8,13 @@ modèle n'est pas disponible (pas de réseau, etc.), on retombe sur une heuristi
 
 from __future__ import annotations
 
+import logging
 import os
 
 import cv2
 import numpy as np
+
+_LOG = logging.getLogger(__name__)
 
 _SESSION = None  # session rembg
 _DEPTH = None  # session ONNX profondeur
@@ -37,7 +40,8 @@ def _get_session():
             from rembg import new_session
 
             _SESSION = new_session("u2net")
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("rembg indisponible (%s) : masque ellipse de repli", exc)
             _SESSION = False
     return _SESSION or None
 
@@ -51,8 +55,8 @@ def subject_mask(image: np.ndarray) -> np.ndarray:
 
             cut = remove(image, session=session)  # RGBA
             return cut[:, :, 3] > 127
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("Détourage rembg échoué (%s) : masque ellipse de repli", exc)
 
     h, w = image.shape[:2]
     mask = np.zeros((h, w), dtype=np.uint8)
@@ -102,7 +106,10 @@ def _get_depth_session():
                 sess = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
                 _DEPTH = sess
                 _DEPTH_IO = (sess.get_inputs()[0].name, sess.get_outputs()[0].name)
-        except Exception:  # noqa: BLE001
+            if _DEPTH is False:
+                _LOG.warning("Modèle de profondeur introuvable : heuristique de repli")
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("Profondeur ONNX indisponible (%s) : heuristique", exc)
             _DEPTH = False
     return (_DEPTH or None), _DEPTH_IO
 
@@ -122,7 +129,8 @@ def _onnx_depth(image: np.ndarray) -> np.ndarray | None:
         depth = cv2.resize(depth, (w, h))
         # Depth-Anything : valeur élevée = proche → cohérent avec notre convention.
         return _normalize(depth)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("Inférence profondeur échouée (%s) : heuristique", exc)
         return None
 
 

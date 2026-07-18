@@ -11,10 +11,13 @@ segmente tous les objets sans prompt), exécuté via ultralytics. Repli automati
 
 from __future__ import annotations
 
+import logging
 import os
 
 import cv2
 import numpy as np
+
+_LOG = logging.getLogger(__name__)
 
 _MODEL = None
 _MIN_AREA_RATIO = 0.0015  # ignore les objets < 0,15 % de l'image
@@ -84,7 +87,8 @@ def _get_model():
             from ultralytics import FastSAM
 
             _MODEL = FastSAM(FASTSAM_MODEL)  # téléchargé au premier appel
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            _LOG.warning("FastSAM indisponible (%s) : repli sur les régions", exc)
             _MODEL = False
     return _MODEL or None
 
@@ -108,7 +112,8 @@ def _fastsam_masks(image: np.ndarray) -> list[np.ndarray] | None:
             return []
         data = r.masks.data.cpu().numpy()  # (N, H, W)
         return [data[i] > 0.5 for i in range(data.shape[0])]
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("Inférence FastSAM échouée (%s) : repli sur les régions", exc)
         return None
 
 
@@ -120,7 +125,8 @@ def _region_masks(image: np.ndarray) -> list[np.ndarray]:
         h, w = image.shape[:2]
         seg = felzenszwalb(image, scale=300, sigma=0.8, min_size=max(64, h * w // 400))
         return [seg == label for label in np.unique(seg)]
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("Segmentation par régions échouée (%s) : image entière", exc)
         # Dernier repli : un seul "objet" = toute l'image.
         h, w = image.shape[:2]
         return [np.ones((h, w), dtype=bool)]
