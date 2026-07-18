@@ -66,6 +66,16 @@ body {
   cursor: default;
 }
 
+.dropzone--compact {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.dropzone--compact .dropzone__hint {
+  font-size: 14px;
+}
+
 .dropzone__title {
   font-size: 18px;
   margin: 0 0 4px;
@@ -90,6 +100,12 @@ body {
   grid-template-columns: 1fr 360px;
   gap: 24px;
   margin-top: 24px;
+  transition: opacity 0.2s;
+}
+
+.results--loading {
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 @media (max-width: 860px) {

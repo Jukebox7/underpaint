@@ -126,15 +126,17 @@ def test_mix_recipe_structure():
     assert recipe["deltaE"] >= 0
 
 
-def test_full_run_without_network(monkeypatch):
-    # Évite le téléchargement du modèle rembg : masque synthétique.
-    def fake_mask(image):
-        h, w = image.shape[:2]
-        m = np.zeros((h, w), dtype=bool)
-        m[h // 2 :, :] = True
-        return m
+def _fake_mask(image):
+    """Masque synthétique : évite le téléchargement du modèle rembg."""
+    h, w = image.shape[:2]
+    m = np.zeros((h, w), dtype=bool)
+    m[h // 2 :, :] = True
+    return m
 
-    monkeypatch.setattr(runner, "subject_mask", fake_mask)
+
+def test_full_run_without_network(monkeypatch):
+    monkeypatch.setattr(runner, "subject_mask", _fake_mask)
+    runner._ANALYSIS_CACHE.clear()
     out = runner.run(_synthetic_png(), num_colors=6, num_planes=3)
     for key in ("lineart", "sepia", "objectContours", "objectPlanes", "planesMap", "paintByNumber"):
         assert out[key].startswith("data:image/png;base64,")
@@ -142,3 +144,21 @@ def test_full_run_without_network(monkeypatch):
     assert len(out["palette"]) >= 2
     assert out["palette"][0]["recipe"]["parts"]
     assert out["planes"][0]["order"] == 1
+
+
+def test_run_caches_costly_analysis(monkeypatch):
+    # Rejouer le pipeline sur la même image avec d'autres réglages ne doit pas
+    # recalculer les étapes coûteuses (détourage, profondeur, segmentation).
+    calls = {"mask": 0}
+
+    def counting_mask(image):
+        calls["mask"] += 1
+        return _fake_mask(image)
+
+    monkeypatch.setattr(runner, "subject_mask", counting_mask)
+    runner._ANALYSIS_CACHE.clear()
+    data = _synthetic_png()
+    first = runner.run(data, num_colors=4, num_planes=3, detail=30)
+    second = runner.run(data, num_colors=8, num_planes=2, detail=80)
+    assert calls["mask"] == 1
+    assert len(first["palette"]) != len(second["palette"])

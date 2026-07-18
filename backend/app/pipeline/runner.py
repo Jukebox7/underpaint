@@ -1,6 +1,14 @@
-"""Orchestrateur : enchaîne les étapes et assemble la réponse."""
+"""Orchestrateur : enchaîne les étapes et assemble la réponse.
+
+Les étapes coûteuses qui ne dépendent que de l'image (détourage, profondeur, FastSAM,
+Florence-2 + SAM) sont mises en cache par empreinte de l'image : rejouer le pipeline avec
+d'autres réglages (couleurs, plans, détail) ne recalcule que les étapes légères.
+"""
 
 from __future__ import annotations
+
+import hashlib
+from collections import OrderedDict
 
 import numpy as np
 
@@ -12,9 +20,32 @@ from .objects import object_contours
 from .paintbynumber import paint_by_number
 from .palette import extract_palette, to_hex
 from .planes import compute_planes
-from .scene import analyze_scene
+from .scene import analyze_scene, extract_objects
 from .segmentation import depth_map, subject_mask
 from .sepia import to_sepia
+
+_ANALYSIS_CACHE: OrderedDict[str, dict] = OrderedDict()
+_ANALYSIS_CACHE_MAX = 4  # dernières images analysées (usage local, mono-utilisateur)
+
+
+def _image_analysis(data: bytes, image: np.ndarray) -> dict:
+    """Étapes coûteuses indépendantes des réglages, en cache LRU par image."""
+    key = hashlib.sha256(data).hexdigest()
+    if key in _ANALYSIS_CACHE:
+        _ANALYSIS_CACHE.move_to_end(key)
+        return _ANALYSIS_CACHE[key]
+
+    mask = subject_mask(image)
+    entry = {
+        "mask": mask,
+        "depth": depth_map(image, mask),
+        "objects_img": object_contours(image),
+        "scene": extract_objects(image),
+    }
+    _ANALYSIS_CACHE[key] = entry
+    while len(_ANALYSIS_CACHE) > _ANALYSIS_CACHE_MAX:
+        _ANALYSIS_CACHE.popitem(last=False)
+    return entry
 
 
 def run(
@@ -23,13 +54,15 @@ def run(
     """Exécute le pipeline complet et renvoie le dict de réponse de l'API."""
     image = load_image(data)
 
-    mask = subject_mask(image)
-    depth = depth_map(image, mask)
+    analysis = _image_analysis(data, image)
+    mask, depth = analysis["mask"], analysis["depth"]
 
     lineart_img = line_art(image, mask=mask, detail=detail)
     sepia_img = to_sepia(image)
-    objects_img = object_contours(image)
-    scene_img, scene_caption, scene_objects = analyze_scene(image, depth, num_planes)
+    objects_img = analysis["objects_img"]
+    scene_img, scene_caption, scene_objects = analyze_scene(
+        image, depth, num_planes, extracted=analysis["scene"]
+    )
     palette = extract_palette(image, num_colors)
     planes_img, planes_meta = compute_planes(image, depth, palette, num_planes)
     pbn_img = paint_by_number(palette)

@@ -50,24 +50,35 @@ class SceneObject(TypedDict):
     baseColor: str
 
 
-def analyze_scene(
-    image: np.ndarray, depth: np.ndarray, num_planes: int = 4
-) -> tuple[np.ndarray, str, list[SceneObject]]:
-    """Renvoie (image objets-par-plan, description, métadonnées objets)."""
+ExtractedObjects = tuple[list[np.ndarray], list[str], str]  # (masques, labels, description)
+
+
+def extract_objects(image: np.ndarray) -> ExtractedObjects:
+    """Partie coûteuse (Florence-2 + SAM), indépendante des réglages utilisateur."""
     caption, items = _describe_and_ground(image)
 
-    masks: list[np.ndarray]
-    labels: list[str]
     if items:
         boxes = [b for _, b in items]
         sam_masks = _sam_boxes(image, boxes)
         if sam_masks is not None and len(sam_masks) == len(items):
-            masks, labels = sam_masks, [lbl for lbl, _ in items]
-        else:
-            masks, labels = _fallback_with_labels(image)
-    else:
-        masks, labels = _fallback_with_labels(image)
+            return sam_masks, [lbl for lbl, _ in items], caption
 
+    masks, labels = _fallback_with_labels(image)
+    return masks, labels, caption
+
+
+def analyze_scene(
+    image: np.ndarray,
+    depth: np.ndarray,
+    num_planes: int = 4,
+    extracted: ExtractedObjects | None = None,
+) -> tuple[np.ndarray, str, list[SceneObject]]:
+    """Renvoie (image objets-par-plan, description, métadonnées objets).
+
+    ``extracted`` permet de réutiliser un résultat de :func:`extract_objects` déjà
+    calculé (cache du runner) : seule la composition dépend de ``num_planes``.
+    """
+    masks, labels, caption = extracted if extracted is not None else extract_objects(image)
     return _compose(image, depth, num_planes, masks, labels, caption)
 
 

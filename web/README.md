@@ -11,6 +11,10 @@
   l'appel API et l'affichage/téléchargement.
 - **Appel API centralisé** : un seul point d'accès dans `src/api.ts` (POST
   `/api/process`), proxifié par Vite vers `http://localhost:8000`.
+- **Réglages en live** : changer un curseur relance automatiquement l'analyse de l'image
+  déposée (debounce court, une requête à la fois, dernier réglage rejoué à la fin). Le
+  résultat précédent reste affiché, estompé, pendant la mise à jour. Une fois une image
+  chargée, la zone de dépôt se réduit en une barre discrète « changer d'image ».
 - **Composants par responsabilité** :
 
 | Composant | Rôle |

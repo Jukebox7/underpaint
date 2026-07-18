@@ -16,6 +16,10 @@
   profondeur utilise une heuristique (pas de `torch`), améliorable plus tard.
 - **Fonctions pures** : chaque module expose `f(image: np.ndarray, ...) -> résultat`, sans
   I/O réseau ni état global (hors cache du modèle `rembg`).
+- **Réglages en live** : le `runner` met en cache (LRU par empreinte d'image) les étapes
+  coûteuses indépendantes des réglages — détourage, profondeur, FastSAM, Florence-2 + SAM.
+  Rejouer le pipeline en changeant couleurs/plans/détail ne recalcule que les étapes
+  légères (trait, palette, compositions).
 
 ## Modules
 

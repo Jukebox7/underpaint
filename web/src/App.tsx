@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Dropzone from './components/Dropzone'
 import ResultGallery from './components/ResultGallery'
 import PalettePanel from './components/PalettePanel'
-import { processImage, type ProcessResponse } from './api'
+import { processImage, type ProcessOptions, type ProcessResponse } from './api'
 
 export default function App() {
+  const [file, setFile] = useState<File | null>(null)
   const [original, setOriginal] = useState<string | null>(null)
   const [result, setResult] = useState<ProcessResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -13,22 +14,54 @@ export default function App() {
   const [numPlanes, setNumPlanes] = useState(4)
   const [detail, setDetail] = useState(50)
 
-  async function handleFile(file: File) {
-    setError(null)
-    setResult(null)
-    setOriginal((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return URL.createObjectURL(file)
-    })
+  // Une seule requête à la fois : si un réglage change pendant l'analyse, on mémorise
+  // la demande et on la rejoue dès que la requête en cours se termine.
+  const busyRef = useRef(false)
+  const pendingRef = useRef<{ file: File; options: ProcessOptions } | null>(null)
+
+  const launch = useCallback(async (f: File, options: ProcessOptions) => {
+    if (busyRef.current) {
+      pendingRef.current = { file: f, options }
+      return
+    }
+    busyRef.current = true
     setLoading(true)
+    setError(null)
     try {
-      const res = await processImage(file, { numColors, numPlanes, detail })
+      const res = await processImage(f, options)
       setResult(res)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur inconnue')
     } finally {
-      setLoading(false)
+      busyRef.current = false
+      const next = pendingRef.current
+      pendingRef.current = null
+      if (next) {
+        void launch(next.file, next.options)
+      } else {
+        setLoading(false)
+      }
     }
+  }, [])
+
+  // Relance l'analyse quand l'image ou un réglage change, avec un court debounce
+  // pour attendre la fin du glissement d'un curseur.
+  useEffect(() => {
+    if (!file) return
+    const timer = setTimeout(() => {
+      void launch(file, { numColors, numPlanes, detail })
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [file, numColors, numPlanes, detail, launch])
+
+  function handleFile(f: File) {
+    setResult(null)
+    setError(null)
+    setOriginal((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(f)
+    })
+    setFile(f)
   }
 
   return (
@@ -46,7 +79,6 @@ export default function App() {
             min={4}
             max={24}
             value={numColors}
-            disabled={loading}
             onChange={(e) => setNumColors(Number(e.target.value))}
           />
         </label>
@@ -57,7 +89,6 @@ export default function App() {
             min={2}
             max={8}
             value={numPlanes}
-            disabled={loading}
             onChange={(e) => setNumPlanes(Number(e.target.value))}
           />
         </label>
@@ -68,19 +99,20 @@ export default function App() {
             min={0}
             max={100}
             value={detail}
-            disabled={loading}
             onChange={(e) => setDetail(Number(e.target.value))}
           />
         </label>
       </div>
 
-      <Dropzone onFile={handleFile} disabled={loading} />
+      <Dropzone onFile={handleFile} compact={Boolean(file)} fileName={file?.name} />
 
-      {loading && <p className="status">Analyse en cours…</p>}
+      {loading && (
+        <p className="status">{result ? 'Mise à jour des réglages…' : 'Analyse en cours…'}</p>
+      )}
       {error && <p className="status status--error">{error}</p>}
 
-      {original && result && !loading && (
-        <div className="results">
+      {original && result && (
+        <div className={`results${loading ? ' results--loading' : ''}`}>
           <ResultGallery original={original} result={result} />
           <PalettePanel
             palette={result.palette}
